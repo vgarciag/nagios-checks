@@ -1,4 +1,12 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+# {{ ansible_managed }}
+
+# this check is get from my Github https://github.com/vgarciag/nagios-checks/blob/master/check_sidekiq_queue forked from https://github.com/wanelo/nagios-checks
+
+# this check uses redis-cli and must be installed previously. Ubuntu: apt install redis-tools
+
+
 # ========================================================================================
 # Sidekiq Queue Size Nagios Check
 #
@@ -31,120 +39,120 @@ PASS=""
 DB=0
 
 # Parse parameters
-while [ $# -gt 0 ]; do
-    case "$1" in
+while [[ ${#} -gt 0 ]]; do
+    case "${1}" in
         -d | --db)
                 shift
-                DB=$1
+                DB=${1}
                 ;;
         -h | --hostname)
                 shift
-                HOST=$1
+                HOST=${1}
                 ;;
         -p | --port)
                 shift
-                PORT=$1
+                PORT=${1}
                 ;;
         -a | --password)
                 shift
-                PASS=$1
+                PASS=${1}
                 ;;
         -q | --queue)
                 shift
-                QUEUE=$1
+                QUEUE=${1}
                 ;;
         -i | --ignore_queues)
                 shift
-                IGNORE_QUEUES=$1
+                IGNORE_QUEUES=${1}
                 ;;
         -n | --namespace)
                 shift
-                NAMESPACE=$1
+                NAMESPACE=${1}
                 ;;
         -s | --system)
                 shift
-                SYSTEM=$1
+                SYSTEM=${1}
                 ;;
         -w | --warning)
                 shift
-                WARNING_THRESHOLD=$1
+                WARNING_THRESHOLD=${1}
                 ;;
         -c | --critical)
                 shift
-                CRITICAL_THRESHOLD=$1
+                CRITICAL_THRESHOLD=${1}
                 ;;
-        *)  echo "Unknown argument: $1"
-            exit $STATE_UNKNOWN
+        *)  echo "Unknown argument: ${1}"
+            exit ${STATE_UNKNOWN}
             ;;
         esac
-shift
+    shift
 done
 
-PATH=/opt/local/bin:$PATH
-NODENAME=$HOSTNAME
+PATH=/opt/local/bin:${PATH}
+NODENAME=${HOSTNAME}
 
 ERR=/tmp/redis-cli.error.$$
-rm -f $ERR
+rm -f ${ERR}
 
 function result {
-  DESCRIPTION=$1
+  DESCRIPTION=${1}
   STATUS=$2
-  echo "SIDEKIQ $DESCRIPTION : ${NODENAME} ${QUEUE_SIZE} on ${QUEUE}|sidekiq_queue_${QUEUE}=${QUEUE_SIZE};${WARNING_THRESHOLD};${CRITICAL_THRESHOLD}"
-  rm -f $ERR
-  exit $STATUS
+  echo "SIDEKIQ ${DESCRIPTION} : ${NODENAME} ${QUEUE_SIZE} on ${QUEUE}|sidekiq_queue_${QUEUE}=${QUEUE_SIZE};${WARNING_THRESHOLD};${CRITICAL_THRESHOLD}"
+  rm -f ${ERR}
+  exit ${STATUS}
 }
 
-if [ "$QUEUE" != "default" -a -n "$SYSTEM" ]; then
-  result "CRITICAL invalid usage: pass -q or -s but not both", $STATE_CRITICAL
+if [[ "${QUEUE}" != "default" && -n "${SYSTEM}" ]]; then
+  result "CRITICAL invalid usage: pass -q or -s but not both", ${STATE_CRITICAL}
 fi
 
-if [ -n "$IGNORE_QUEUES" -a "$QUEUE" != "all" ]; then
+if [[ -n "${IGNORE_QUEUES}" && "${QUEUE}" != "all" ]]; then
   result "CRITICAL invalid usage: ignore_queues can only be used with QUEUE = all as value", $STATE_CRITICAL
 fi
 
-if [ -n "$SYSTEM" -a "$SYSTEM" != "schedule" -a "$SYSTEM" != "retry" ] ; then
-  result "CRITICAL invalid usage: -s expect one of schedule or retry", $STATE_CRITICAL
+if [[ -n "${SYSTEM}" && "${SYSTEM}" != "schedule" && "${SYSTEM}" != "retry" ]] ; then
+  result "CRITICAL invalid usage: -s expect one of schedule or retry", ${STATE_CRITICAL}
 fi
 
-if [ ! -z "$PASS"  ]; then
-  PASS="-a $PASS"
+if [[ ! -z "${PASS}"  ]]; then
+  PASS="-a ${PASS}"
 fi
 
-if [ ! -z "$NAMESPACE"  ]; then
- NAMESPACE="$NAMESPACE:"
+if [[ ! -z "${NAMESPACE}"  ]]; then
+ NAMESPACE="${NAMESPACE}:"
 fi
 
-if [ -n "$SYSTEM" ]; then
-  QUEUE_SIZE=`redis-cli -h $HOST -p $PORT $PASS -n $DB zcard ${NAMESPACE}$SYSTEM 2>$ERR | cut -d " " -f 1`
-  QUEUE=$SYSTEM
-elif [ "$QUEUE" == "all" ]; then
-  ALL_QUEUES=`redis-cli -h $HOST -p $PORT $PASS -n $DB smembers queues 2>$ERR`
+if [[ -n "${SYSTEM}" ]]; then
+  QUEUE_SIZE=$(redis-cli -h ${HOST} -p ${PORT} ${PASS} -n ${DB} zcard ${NAMESPACE}${SYSTEM} 2>${ERR} | cut -d " " -f 1)
+  QUEUE=${SYSTEM}
+elif [[ "${QUEUE}" == "all" ]]; then
+  ALL_QUEUES=$(redis-cli -h ${HOST} -p ${PORT} ${PASS} -n ${DB} smembers queues 2>${ERR})
   QUEUE_SIZE=-1
   QUEUE="none"
-  for EACH_QUEUE in $ALL_QUEUES; do
-    [[ "$IGNORE_QUEUES" == *"$EACH_QUEUE"* ]] && continue
-    THIS_QUEUE_SIZE=`redis-cli -h $HOST -p $PORT $PASS -n $DB llen ${NAMESPACE}queue:$EACH_QUEUE 2>$ERR | cut -d " " -f 1`
-    if [ "$THIS_QUEUE_SIZE" -gt "$QUEUE_SIZE" ]; then
-      QUEUE_SIZE=$THIS_QUEUE_SIZE
-      QUEUE=$EACH_QUEUE
+  for EACH_QUEUE in ${ALL_QUEUES}; do
+    [[ "${IGNORE_QUEUES}" == *"${EACH_QUEUE}"* ]] && continue
+    THIS_QUEUE_SIZE=$(redis-cli -h ${HOST} -p $PORT ${PASS} -n ${DB} llen ${NAMESPACE}queue:${EACH_QUEUE} 2>${ERR} | cut -d " " -f 1)
+    if [[ "${THIS_QUEUE_SIZE}" -gt "${QUEUE_SIZE}" ]]; then
+      QUEUE_SIZE=${THIS_QUEUE_SIZE}
+      QUEUE=${EACH_QUEUE}
     fi
   done
 else
-  QUEUE_SIZE=`redis-cli -h $HOST -p $PORT $PASS -n $DB llen ${NAMESPACE}queue:$QUEUE 2>$ERR | cut -d " " -f 1`
+  QUEUE_SIZE=$(redis-cli -h ${HOST} -p ${PORT} ${PASS} -n ${DB} llen ${NAMESPACE}queue:${QUEUE} 2>${ERR} | cut -d " " -f 1)
 fi
 
-if [ -s "$ERR" ];  then
-  QUEUE_SIZE=`cat $ERR`
-  result "CRITICAL" $STATE_CRITICAL
+if [[ -s "${ERR}" ]];  then
+  QUEUE_SIZE=$(cat ${ERR})
+  result "CRITICAL" ${STATE_CRITICAL}
 fi
 
-if [ $QUEUE_SIZE -ge $WARNING_THRESHOLD ] && [ $QUEUE_SIZE -lt $CRITICAL_THRESHOLD ]; then
-  result "WARNING" $STATE_WARNING
-elif [ $QUEUE_SIZE -ge $CRITICAL_THRESHOLD ]; then
-  result "CRITICAL" $STATE_CRITICAL
+if [[ ${QUEUE_SIZE} -ge ${WARNING_THRESHOLD}  &&  ${QUEUE_SIZE} -lt ${CRITICAL_THRESHOLD} ]]; then
+  result "WARNING" ${STATE_WARNING}
+elif [[ ${QUEUE_SIZE} -ge ${CRITICAL_THRESHOLD} ]]; then
+  result "CRITICAL" ${STATE_CRITICAL}
 else
-  result "OK" $STATE_OK
+  result "OK" ${STATE_OK}
 fi
 
 # ensure that output from stderr is cleaned up
-rm -f $ERR
+rm -f ${ERR}
