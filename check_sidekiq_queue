@@ -4,7 +4,7 @@
 
 # this check is get from my Github https://github.com/vgarciag/nagios-checks/blob/master/check_sidekiq_queue forked from https://github.com/wanelo/nagios-checks
 
-# this check uses redis-cli and must be installed previously. Ubuntu: apt install redis-tools
+# this check use redis-cli and must be installed previously. Ubuntu: apt install redis-tools
 
 
 # ========================================================================================
@@ -39,7 +39,7 @@ PASS=""
 DB=0
 
 # Parse parameters
-while [[ ${#} -gt 0 ]]; do
+while [[ $# -gt 0 ]]; do
     case "${1}" in
         -d | --db)
                 shift
